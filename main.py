@@ -27,10 +27,9 @@ from kivy.core.window import Window
 from pidev.kivy import DPEAButton
 from pidev.kivy import PauseScreen
 from time import sleep
-import RPi.GPIO as GPIO 
+import RPi.GPIO as GPIO
 from pidev.stepper import stepper
 from pidev.Cyprus_Commands import Cyprus_Commands_RPi as cyprus
-
 
 # ////////////////////////////////////////////////////////////////
 # //                      GLOBAL VARIABLES                      //
@@ -63,8 +62,9 @@ class MyApp(App):
         self.title = "Robotic Arm"
         return sm
 
+
 Builder.load_file('main.kv')
-Window.clearcolor = (.1, .1,.1, 1) # (WHITE)
+Window.clearcolor = (.1, .1, .1, 1)  # (WHITE)
 
 cyprus.open_spi()
 
@@ -73,16 +73,18 @@ cyprus.open_spi()
 # ////////////////////////////////////////////////////////////////
 
 sm = ScreenManager()
-arm = stepper(port = 0, speed = 10)
+arm = stepper(port=0, speed=10)
+
 
 # ////////////////////////////////////////////////////////////////
 # //                       MAIN FUNCTIONS                       //
 # //             SHOULD INTERACT DIRECTLY WITH HARDWARE         //
 # ////////////////////////////////////////////////////////////////
-	
+
 class MainScreen(Screen):
     version = cyprus.read_firmware_version()
     armPosition = 0
+    arm_direction = 0
     lastClick = time.clock()
 
     def __init__(self, **kwargs):
@@ -92,7 +94,7 @@ class MainScreen(Screen):
     def debounce(self):
         processInput = False
         currentTime = time.clock()
-        if ((currentTime - self.lastClick) > DEBOUNCE):
+        if (currentTime - self.lastClick) > DEBOUNCE:
             processInput = True
         self.lastClick = currentTime
         return processInput
@@ -102,24 +104,38 @@ class MainScreen(Screen):
 
     def toggleMagnet(self):
         print("Process magnet here")
-        
+
     def auto(self):
         print("Run the arm automatically here")
 
     def setArmPosition(self, position):
+
+        if position > 50:
+            self.arm_direction = 1
+        else:
+            self.arm_direction = -1
+        self.armPosition += position / 50
+        self.s0.start_relative_move(self.arm_direction * position / 50)
         print("Move arm here")
 
     def homeArm(self):
         arm.home(self.homeDirection)
-        
+
     def isBallOnTallTower(self):
         print("Determine if ball is on the top tower")
 
     def isBallOnShortTower(self):
         print("Determine if ball is on the bottom tower")
-        
+
     def initialize(self):
         print("Home arm and turn off magnet")
+        self.cyprus = cyprus
+        self.cyprus.initialize()
+
+        self.s0 = stepper(port=0, micro_steps=32, hold_current=20, run_current=20, accel_current=20, deaccel_current=20,
+                          steps_per_unit=200, speed=2)
+
+
 
     def resetColors(self):
         self.ids.armControl.color = YELLOW
@@ -128,9 +144,9 @@ class MainScreen(Screen):
 
     def quit(self):
         MyApp().stop()
-    
-sm.add_widget(MainScreen(name = 'main'))
 
+
+sm.add_widget(MainScreen(name='main'))
 
 # ////////////////////////////////////////////////////////////////
 # //                          RUN APP                           //

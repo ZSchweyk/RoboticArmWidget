@@ -24,12 +24,14 @@ from kivy.animation import Animation
 from functools import partial
 from kivy.config import Config
 from kivy.core.window import Window
+from kivy.properties import ObjectProperty
 from pidev.kivy import DPEAButton
 from pidev.kivy import PauseScreen
 from time import sleep
 import RPi.GPIO as GPIO
 from pidev.stepper import stepper
 from pidev.Cyprus_Commands import Cyprus_Commands_RPi as cyprus
+from threading import Thread
 
 # ////////////////////////////////////////////////////////////////
 # //                      GLOBAL VARIABLES                      //
@@ -86,6 +88,8 @@ class MainScreen(Screen):
     armPosition = 0
     arm_direction = 0
     lastClick = time.clock()
+    armControl = ObjectProperty(None)
+    magnetControl = ObjectProperty(None)
 
     def __init__(self, **kwargs):
         super(MainScreen, self).__init__(**kwargs)
@@ -100,23 +104,46 @@ class MainScreen(Screen):
         return processInput
 
     def toggleArm(self):
-        print("Process arm movement here")
+        if self.arm_status:
+            compare = 0
+            self.armControl.text = "Lower Arm"
+        else:
+            compare = 50000
+            self.armControl.text = "Raise Arm"
+        self.cyprus.set_pwm_values(1, period_value=100000,
+                                   compare_value=compare,
+                                   compare_mode=self.cyprus.LESS_THAN_OR_EQUAL)
+        self.arm_status = 1 - self.arm_status
 
     def toggleMagnet(self):
-        print("Process magnet here")
+        self.cyprus.set_servo_position(2, self.electromagnet_status)
+        self.electromagnet_status = .5 - self.electromagnet_status
+        if self.electromagnet_status == .5:
+            self.magnetControl.text = "Release Ball"
+        else:
+            self.magnetControl.text = "Hold Ball"
 
     def auto(self):
         print("Run the arm automatically here")
 
-    def setArmPosition(self, position):
+    def moveArmWithThread(self, direction):
+        Thread(target=lambda: self.moveArm(direction)).start()
 
-        if position > 50:
-            self.arm_direction = 1
+    def moveArm(self, text):
+        if text == "CCW":
+            direction = 0
         else:
-            self.arm_direction = -1
-        self.armPosition += position / 50
-        self.s0.start_relative_move(self.arm_direction * position / 50)
-        print("Move arm here")
+            direction = 1
+
+        self.is_s0_moving = 1
+        self.s0.go_until_press(direction, 7500)
+        while True:
+            if not self.is_s0_moving:
+                self.s0.hardStop()
+            sleep(.075)
+
+    def stopArm(self):
+        self.is_s0_moving = 0
 
     def homeArm(self):
         arm.home(self.homeDirection)
@@ -127,6 +154,25 @@ class MainScreen(Screen):
     def isBallOnShortTower(self):
         print("Determine if ball is on the bottom tower")
 
+
+    def reset(self):
+        # Talon on port 2.
+        # Must be 0 or .5
+        self.electromagnet_status = .5
+        self.toggleMagnet()
+
+        # Stepper
+        # self.is_s0_moving = 0
+        self.s0.hardStop()
+
+        # 1 = up and 0 = down
+        # Initially, the arm defaults to staying up. By setting self.arm_status = 1, the next time
+        # the arm toggles, it will go down.
+        self.arm_status = 1
+        self.toggleArm()
+
+
+
     def initialize(self):
         print("Home arm and turn off magnet")
         self.cyprus = cyprus
@@ -134,6 +180,20 @@ class MainScreen(Screen):
 
         self.s0 = stepper(port=0, micro_steps=32, hold_current=20, run_current=20, accel_current=20, deaccel_current=20,
                           steps_per_unit=200, speed=2)
+
+        # It really doesn't matter which motor controller you use in this case. Both act as switches.
+
+        # Cytron Motor Controller, which is connected to a device that electronically presses a button that controlls air pressure.
+        # Use set_pwm_values. 0 means that the arm is raised and 50000 means that it's lowered.
+        self.cyprus.setup_servo(1)
+
+        # Talon Motor Controller, which is connected to the electromagnet.
+        # Use set_servo_position. 1 and 0 mean on and .5 means off.
+        # Will use 0 and .5 to easily toggle between states without a condition.
+        self.cyprus.setup_servo(2)
+
+        self.reset()
+
 
 
 
@@ -143,6 +203,7 @@ class MainScreen(Screen):
         self.ids.auto.color = BLUE
 
     def quit(self):
+        self.stopArm()
         MyApp().stop()
 
 

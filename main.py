@@ -5,6 +5,8 @@
 import math
 import sys
 import time
+import spidev
+import os
 
 from kivy.app import App
 from kivy.lang import Builder
@@ -32,6 +34,7 @@ import RPi.GPIO as GPIO
 from pidev.stepper import stepper
 from pidev.Cyprus_Commands import Cyprus_Commands_RPi as cyprus
 from threading import Thread
+
 
 # ////////////////////////////////////////////////////////////////
 # //                      GLOBAL VARIABLES                      //
@@ -90,10 +93,29 @@ class MainScreen(Screen):
     lastClick = time.clock()
     armControl = ObjectProperty(None)
     magnetControl = ObjectProperty(None)
+    move_cw = ObjectProperty(None)
+    move_ccw = ObjectProperty(None)
 
     def __init__(self, **kwargs):
         super(MainScreen, self).__init__(**kwargs)
         self.initialize()
+
+    @staticmethod
+    def is_port_on(port):
+        check_bin = None
+        if port == 6:
+            check_bin = 0b0001
+        elif port == 7:
+            check_bin = 0b0010
+        elif port == 8:
+            check_bin = 0b0100
+        elif port == 9:
+            check_bin = 0b1000
+
+        if not cyprus.read_gpio() & check_bin:
+            return True
+        else:
+            return False
 
     def debounce(self):
         processInput = False
@@ -124,35 +146,44 @@ class MainScreen(Screen):
             self.magnetControl.text = "Hold Ball"
 
     def auto(self):
-        print("Run the arm automatically here")
+        # Status of lower tower.
+        self.is_port_on(7)
 
     def moveArmWithThread(self, direction):
-        Thread(target=lambda: self.moveArm(direction)).start()
+        Thread(target=lambda: self.moveArm(direction, False)).start()
 
-    def moveArm(self, text):
+    def moveArm(self, text, stop_when_switch_on):
         if text == "CCW":
             direction = 0
         else:
             direction = 1
 
-        self.is_s0_moving = 1
+        self.is_s0_moving = True
+        # Both of the following make the motor stop when port s0 is on.
         self.s0.go_until_press(direction, 7500)
+        # self.s0.run(direction, 250)
         while True:
-            if not self.is_s0_moving:
+            if (not self.is_s0_moving) or (stop_when_switch_on and self.is_port_on(8)):
                 self.s0.hardStop()
-            sleep(.075)
+                return
+            sleep(.1)
+
+
+
+
+    def run_stepper_motor(self, entered_direction):
+        """direction must be a 0 or 1."""
+        if entered_direction == 0:
+            direction = 1
+        else:
+            direction = -1
+        self.s0.start_relative_move(direction * 15)
 
     def stopArm(self):
-        self.is_s0_moving = 0
+        self.is_s0_moving = False
 
     def homeArm(self):
         arm.home(self.homeDirection)
-
-    def isBallOnTallTower(self):
-        print("Determine if ball is on the top tower")
-
-    def isBallOnShortTower(self):
-        print("Determine if ball is on the bottom tower")
 
 
     def reset(self):
@@ -163,7 +194,8 @@ class MainScreen(Screen):
 
         # Stepper
         # self.is_s0_moving = 0
-        self.s0.hardStop()
+        # self.moveArm("CCW", True)
+        # self.s0.set_as_home()
 
         # 1 = up and 0 = down
         # Initially, the arm defaults to staying up. By setting self.arm_status = 1, the next time

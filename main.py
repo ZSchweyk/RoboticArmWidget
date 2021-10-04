@@ -146,8 +146,51 @@ class MainScreen(Screen):
             self.magnetControl.text = "Hold Ball"
 
     def auto(self):
+        self.reset(False)
+        #                                           HTower, LTower
+        tower_positions_relative_to_prox_sensor_cw = [1.75, 1.25]
         # Status of lower tower.
-        self.is_port_on(7)
+        if self.is_port_on(7):
+            # Test this out and make changes if necessary. This is a CW rotation.
+            zero_position = tower_positions_relative_to_prox_sensor_cw[1]
+        # Status of higher tower
+        elif self.is_port_on(6):
+            # Test this out and make changes if necessary. This is a CW rotation.
+            zero_position = tower_positions_relative_to_prox_sensor_cw[0]
+        else:
+            return
+
+        remainder = abs(round(self.s0.get_position_in_units(), 3)) % 2
+
+        total_rotation = round(zero_position - remainder, 3)
+        if total_rotation > 1 or total_rotation < -1:
+            total_rotation = round(total_rotation - 2 * self.sign_of_num(total_rotation), 3)
+
+        self.s0.start_relative_move(total_rotation)
+        self.move_arm_down_and_up()
+
+        diff = tower_positions_relative_to_prox_sensor_cw[0] - tower_positions_relative_to_prox_sensor_cw[1]
+
+        if zero_position == tower_positions_relative_to_prox_sensor_cw[1]:
+            self.s0.start_relative_move(diff)
+        else:
+            self.s0.start_relative_move(-1 * diff)
+
+        self.move_arm_down_and_up()
+
+    def move_arm_down_and_up(self):
+        self.toggleArm()
+        self.toggleMagnet()
+        self.toggleArm()
+
+    @staticmethod
+    def sign_of_num(num):
+        if num > 0:
+            return 1
+        elif num < 0:
+            return -1
+        else:
+            return 0
 
     def moveArmWithThread(self, direction):
         Thread(target=lambda: self.moveArm(direction, False)).start()
@@ -186,7 +229,7 @@ class MainScreen(Screen):
         arm.home(self.homeDirection)
 
 
-    def reset(self):
+    def reset(self, initialize_stepper):
         # Talon on port 2.
         # Must be 0 or .5
         self.electromagnet_status = .5
@@ -194,8 +237,11 @@ class MainScreen(Screen):
 
         # Stepper
         # self.is_s0_moving = 0
-        # self.moveArm("CCW", True)
-        # self.s0.set_as_home()
+
+        # Uncomment when ready!
+        if initialize_stepper:
+            self.moveArm("CCW", True)
+            self.s0.set_as_home()
 
         # 1 = up and 0 = down
         # Initially, the arm defaults to staying up. By setting self.arm_status = 1, the next time
@@ -224,7 +270,7 @@ class MainScreen(Screen):
         # Will use 0 and .5 to easily toggle between states without a condition.
         self.cyprus.setup_servo(2)
 
-        self.reset()
+        self.reset(True)
 
 
 

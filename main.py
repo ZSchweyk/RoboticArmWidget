@@ -147,8 +147,9 @@ class MainScreen(Screen):
 
     def auto(self):
         self.reset(False)
+        sleep(.5)
         #                                           HTower, LTower
-        tower_positions_relative_to_prox_sensor_cw = [1.75, 1.25]
+        tower_positions_relative_to_prox_sensor_cw = [1.5, 1.17]
         # Status of lower tower.
         if self.is_port_on(7):
             # Test this out and make changes if necessary. This is a CW rotation.
@@ -160,28 +161,38 @@ class MainScreen(Screen):
         else:
             return
 
-        remainder = abs(round(self.s0.get_position_in_units(), 3)) % 2
+        remainder = round(self.s0.get_position_in_units(), 3)
+
+        print("Zero Position:", zero_position)
+        print("Remainder:", remainder)
 
         total_rotation = round(zero_position - remainder, 3)
         if total_rotation > 1 or total_rotation < -1:
             total_rotation = round(total_rotation - 2 * self.sign_of_num(total_rotation), 3)
 
-        self.s0.start_relative_move(total_rotation)
+        self.s0.relative_move(total_rotation)
+        sleep(1.5)
         self.move_arm_down_and_up()
+
 
         diff = tower_positions_relative_to_prox_sensor_cw[0] - tower_positions_relative_to_prox_sensor_cw[1]
 
         if zero_position == tower_positions_relative_to_prox_sensor_cw[1]:
-            self.s0.start_relative_move(diff)
+            self.s0.relative_move(diff)
         else:
-            self.s0.start_relative_move(-1 * diff)
+            self.s0.relative_move(-1*diff)
+
+        sleep(1.5)
 
         self.move_arm_down_and_up()
 
     def move_arm_down_and_up(self):
         self.toggleArm()
+        sleep(1.5)
         self.toggleMagnet()
+        sleep(.5)
         self.toggleArm()
+        sleep(1.5)
 
     @staticmethod
     def sign_of_num(num):
@@ -209,10 +220,7 @@ class MainScreen(Screen):
             if (not self.is_s0_moving) or (stop_when_switch_on and self.is_port_on(8)):
                 self.s0.hardStop()
                 return
-            sleep(.1)
-
-
-
+            sleep(.05)
 
     def run_stepper_motor(self, entered_direction):
         """direction must be a 0 or 1."""
@@ -234,15 +242,16 @@ class MainScreen(Screen):
         # Must be 0 or .5
         self.electromagnet_status = .5
         self.toggleMagnet()
+        sleep(.5)
 
         # Stepper
         # self.is_s0_moving = 0
 
-        # Uncomment when ready!
         if initialize_stepper:
             self.moveArm("CCW", True)
             self.s0.set_as_home()
 
+        sleep(.5)
         # 1 = up and 0 = down
         # Initially, the arm defaults to staying up. By setting self.arm_status = 1, the next time
         # the arm toggles, it will go down.
@@ -269,6 +278,8 @@ class MainScreen(Screen):
         # Use set_servo_position. 1 and 0 mean on and .5 means off.
         # Will use 0 and .5 to easily toggle between states without a condition.
         self.cyprus.setup_servo(2)
+
+        sleep(.25)
 
         self.reset(True)
 
